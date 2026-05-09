@@ -1,0 +1,100 @@
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
+import { format } from 'date-fns';
+
+interface Movie {
+  id: number;
+  title: string;
+  year: number | null;
+  status: string;
+  my_rating: number | null;
+  tags: string[] | null;
+  review: string | null;
+  created_at: string;
+  watched_at: string | null;
+  added_at: string | null;
+}
+
+function Stars({ rating }: { rating: number | null }) {
+  const r = rating ?? 0;
+  return (
+    <span className="text-sm">
+      {[1, 2, 3, 4, 5].map((i) => (
+        <span key={i} className={i <= r ? 'text-amber-500' : 'text-gray-600'}>★</span>
+      ))}
+    </span>
+  );
+}
+
+export default function MovieList({ status }: { status: string }) {
+  const navigate = useNavigate();
+  const [movies, setMovies] = useState<Movie[]>([]);
+  const [filtered, setFiltered] = useState<Movie[]>([]);
+  const [search, setSearch] = useState('');
+  const [tagFilter, setTagFilter] = useState('');
+  const [allTags, setAllTags] = useState<string[]>([]);
+
+  useEffect(() => { load(); }, [status]);
+  useEffect(() => { applyFilter(); }, [search, tagFilter, movies]);
+
+  async function load() {
+    const { data } = await supabase.from('gl_movies').select('*').eq('status', status).order('created_at', { ascending: false });
+    const list = data ?? [];
+    setMovies(list);
+    const tags = new Set<string>();
+    list.forEach((m) => m.tags?.forEach((t: string) => tags.add(t)));
+    setAllTags(Array.from(tags));
+  }
+
+  function applyFilter() {
+    let list = movies;
+    if (search) list = list.filter((m) => m.title.toLowerCase().includes(search.toLowerCase()));
+    if (tagFilter) list = list.filter((m) => m.tags?.includes(tagFilter));
+    setFiltered(list);
+  }
+
+  return (
+    <div className="p-4 flex flex-col gap-4">
+      <div className="flex items-center gap-2">
+        <button onClick={() => navigate('/movies')} className="text-gray-400 text-sm">← 返回</button>
+        <h1 className="text-xl font-bold text-gray-100 flex-1">{status}</h1>
+        <span className="text-gray-500 text-sm">{filtered.length}部</span>
+      </div>
+
+      <input
+        className="w-full bg-gray-900 border border-gray-800 rounded-lg px-4 py-2 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-amber-500"
+        placeholder="搜索标题..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
+
+      {allTags.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => setTagFilter('')} className={`text-xs px-2 py-1 rounded-full ${!tagFilter ? 'bg-amber-500 text-gray-950' : 'bg-gray-800 text-gray-400'}`}>全部</button>
+          {allTags.map((t) => (
+            <button key={t} onClick={() => setTagFilter(tagFilter === t ? '' : t)} className={`text-xs px-2 py-1 rounded-full ${tagFilter === t ? 'bg-amber-500 text-gray-950' : 'bg-gray-800 text-gray-400'}`}>{t}</button>
+          ))}
+        </div>
+      )}
+
+      <div className="flex flex-col gap-2">
+        {filtered.map((m) => (
+          <button key={m.id} onClick={() => navigate(`/movies/${m.id}`)} className="flex items-center gap-3 bg-gray-900 rounded-lg px-4 py-3 text-left w-full">
+            <div className="flex-1 min-w-0">
+              <p className="text-gray-100 truncate">{m.title}</p>
+              <div className="flex items-center gap-2 mt-1">
+                {m.my_rating && <Stars rating={m.my_rating} />}
+                {m.review && <span className="text-gray-500 text-xs truncate">{m.review}</span>}
+              </div>
+            </div>
+            <span className="text-gray-600 text-xs shrink-0">
+              {m.watched_at ? format(new Date(m.watched_at), 'yyyy-MM-dd') : m.added_at ? format(new Date(m.added_at), 'yyyy-MM-dd') : ''}
+            </span>
+          </button>
+        ))}
+        {filtered.length === 0 && <p className="text-gray-500 text-sm text-center py-8">暂无数据</p>}
+      </div>
+    </div>
+  );
+}
